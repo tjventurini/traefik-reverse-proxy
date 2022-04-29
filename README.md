@@ -26,6 +26,8 @@ make init
 
 ## Usage
 
+### Commands
+
 ```bash
 # Run setup wizard
 make init
@@ -37,6 +39,12 @@ make stop # alias for 'make down'
 # Uninstall Traefik
 make clear
 ```
+
+<!-- TODO: Add sample code on how to add an environment to the Traefik network -->
+
+## Configuration
+
+<!-- TODO: Show .env.example variables and how to overwrite with docker-compose.overwrite.yml -->
 
 ## Links and Resources
 
