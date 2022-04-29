@@ -4,7 +4,39 @@
 
 This Traefik setup is an easy way to setup a local or production reverse proxy to handle incoming requests from outside your docker environment.
 
-## Setup
+## Quick Start
+
+First you will need to clone this repository.
+
+```bash
+git clone git@github.com:tjventurini/traefik-reverse-proxy.git
+```
+
+Then navigate into that directory in order to continue.
+
+```bash
+cd traefik-reverse-proxy
+```
+
+Now simply run `make init` or `make` from within the project root directory. The wizard will guide you through.
+
+```bash
+make init
+```
+
+## Usage
+
+```bash
+# Run setup wizard
+make init
+# Start Traefik
+make start
+# Stop Traefik
+make down
+make stop # alias for 'make down'
+# Uninstall Traefik
+make clear
+```
 
 ## Links and Resources
 
