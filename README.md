@@ -18,7 +18,7 @@ Then navigate into that directory in order to continue.
 cd traefik-reverse-proxy
 ```
 
-Now simply run `make init` or `make` from within the project root directory. The wizard will guide you through.
+Now simply run `make init` or `make` from within the project root directory. The wizard will guide you through 🧙‍♂️
 
 ```bash
 make init
