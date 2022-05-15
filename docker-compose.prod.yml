@@ -1,0 +1,33 @@
+version: '3.8'
+
+networks:
+  default:
+    internal: false
+    name: ${NETWORK_NAME}
+
+services:
+  traefik:
+    image: traefik:2.6
+    restart: ${RESTART}
+    command:
+      - "--providers.docker"
+      - "--api.dashboard=${DASHBOARD}"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Enable ACME (Let's Encrypt): automatic SSL.
+      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.myresolver.acme.storage=acme.json"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "traefik.enable=true"
+      # https
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.rule=Host(`${HOST}`)"
+      - "traefik.http.routers.api.service=api@internal"
