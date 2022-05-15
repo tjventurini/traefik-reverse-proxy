@@ -40,11 +40,46 @@ make stop # alias for 'make down'
 make clear
 ```
 
-<!-- TODO: Add sample code on how to add an environment to the Traefik network -->
-
 ## Configuration
 
-<!-- TODO: Show .env.example variables and how to overwrite with docker-compose.overwrite.yml -->
+You can configure your traefik environment by editing the `.env` file. See the contents of that file for more information.
+
+At the time of writing this the following options are available.
+
+```
+NETWORK_NAME=reverse-proxy
+RESTART=no
+DASHBOARD=true
+HOST=localhost
+```
+
+## Add Docker-Compose Services to Traefik Network
+
+### Development Environment
+
+```yml
+version: '3.8'
+networks:
+  frontend:
+    external:
+      name: reverse-proxy
+services:
+  someservice:
+    # ...
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=reverse-proxy"
+      # http
+      - "traefik.http.routers.someservice.rule=Host(`someservice.com`)"
+      - "traefik.http.routers.someservice-http.entrypoints=web"
+    networks:
+     - frontend
+     - ...
+```
+
+### Production Environment
+
+<!-- TODO: Add docker-compose setup for production -->
 
 ## Links and Resources
 
