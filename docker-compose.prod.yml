@@ -11,28 +11,33 @@ services:
     restart: ${RESTART}
     command:
       - "--providers.docker"
+      - "--providers.docker.exposedByDefault=false"
       - "--api.dashboard=${DASHBOARD}"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       # Enable ACME (Let's Encrypt): automatic SSL.
       - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
-      - "--certificatesresolvers.letsencrypt.acme.storage=acme.json"
-      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/etc/traefik/acme/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      # Global redirect to https
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt/acme.json:/etc/traefik/acme/acme.json
     labels:
       - "traefik.enable=true"
       # http
-      - "traefik.http.routers.api.entrypoints=web"
-      - "traefik.http.routers.api.rule=Host(`${HOST}`)"
-      - "traefik.http.routers.api.service=api@internal"
+      - "traefik.http.routers.dashboard-http.entrypoints=web"
+      - "traefik.http.routers.dashboard-http.rule=Host(`${HOST}`)"
+      - "traefik.http.routers.dashboard-http.service=api@internal"
       # https
-      - "traefik.http.routers.api.entrypoints=websecure"
-      - "traefik.http.routers.api.rule=Host(`${HOST}`)"
-      - "traefik.http.routers.api.tls=true"
-      - "traefik.http.routers.api.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.rule=Host(`${HOST}`)"
+      - "traefik.http.routers.dashboard.tls=true"
+      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dashboard.service=api@internal"
