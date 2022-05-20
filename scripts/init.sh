@@ -63,12 +63,19 @@ else
 fi
 
 # Create acme file if not present
-if [ $ENVIRONMENT == "prod" ] && [ ! -f letsencrypt/acme.json ]; then
-    echo -e "${WARN}Creating acme.json file...${NC}"
-    touch letsencrypt/acme.json
-    echo "{}" > letsencrypt/acme.json
-    chmod 600 letsencrypt/acme.json
+if [ $ENVIRONMENT == "prod" ]; then
+    if [ ! -f letsencrypt/acme.json ]; then
+        echo -e "${SUCCESS}Creating acme.json file...${NC}"
+        touch letsencrypt/acme.json
+        echo "{}" > letsencrypt/acme.json
+        chmod 600 letsencrypt/acme.json
+    else
+        echo -e "${WARN}acme.json already exists, skipping...${NC}"
+    fi
 fi
+
+echo -e "${SUCCESS}Done!${NC}"
+echo -e "${WARN}Please update the your '.env' file now 💪${NC}"
 
 # Exit sucessfully.
 exit 0
