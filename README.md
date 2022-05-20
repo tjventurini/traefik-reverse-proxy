@@ -12,7 +12,7 @@ First you will need to clone this repository.
 git clone git@github.com:tjventurini/traefik-reverse-proxy.git
 ```
 
-Then navigate into that directory in order to continue.
+Navigate into the project directory in order to continue.
 
 ```bash
 cd traefik-reverse-proxy
@@ -57,24 +57,30 @@ HOST=localhost
 
 ### Development Environment
 
+Update your projects `docker-compose.yml` file so that it includes the *network* and *labels* as shown below. Also make sure that you do not expose any ports on your services.
+
 ```yml
 version: '3.8'
+
+# setup the network
 networks:
   frontend:
     external:
       name: reverse-proxy
+
 services:
   someservice:
-    # ...
+    # add the labels to the service configuration
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=reverse-proxy"
       # http
       - "traefik.http.routers.someservice.rule=Host(`someservice.com`)"
-      - "traefik.http.routers.someservice-http.entrypoints=web"
+      - "traefik.http.routers.someservice.entrypoints=web"
+    # add the network to the service configuration
     networks:
      - frontend
-     - ...
+    # ...
 ```
 
 ### Production Environment
@@ -84,3 +90,4 @@ services:
 ## Links and Resources
 
 * https://doc.traefik.io/traefik/
+* https://github.com/korridor/reverse-proxy-docker-traefik
