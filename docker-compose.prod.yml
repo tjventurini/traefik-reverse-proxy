@@ -31,10 +31,6 @@ services:
       - ./letsencrypt/acme.json:/etc/traefik/acme/acme.json
     labels:
       - "traefik.enable=true"
-      # http
-      - "traefik.http.routers.dashboard-http.entrypoints=web"
-      - "traefik.http.routers.dashboard-http.rule=Host(`${HOST}`)"
-      - "traefik.http.routers.dashboard-http.service=api@internal"
       # https
       - "traefik.http.routers.dashboard.entrypoints=websecure"
       - "traefik.http.routers.dashboard.rule=Host(`${HOST}`)"
