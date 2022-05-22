@@ -85,7 +85,31 @@ services:
 
 ### Production Environment
 
-<!-- TODO: Add docker-compose setup for production -->
+```yml
+version: '3.8'
+
+# setup the network
+networks:
+  frontend:
+    external:
+      name: reverse-proxy
+
+services:
+  someservice:
+    # add the labels to the service configuration
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=reverse-proxy"
+      # http
+      - "traefik.http.routers.someservice.rule=Host(`someservice.com`)"
+      - "traefik.http.routers.someservice.entrypoints=websecure"
+      - "traefik.http.routers.someservice.tls=true"
+      - "traefik.http.routers.someservice.tls.certresolver=letsencrypt"
+    # add the network to the service configuration
+    networks:
+     - frontend
+    # ...
+```
 
 ## Links and Resources
 
