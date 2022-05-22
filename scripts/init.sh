@@ -5,8 +5,7 @@ source ./config/colors.conf
 
 # Function to show help message.
 function showHelp() {
-    echo -e "${WARN}Usage (Makefile): make prod | make local${NC}"
-    echo -e "${WARN}Usage (Makefile): make prod | make local${NC}"
+    echo -e "${WARN}Usage (Makefile): make init${NC}"
 }
 
 # Get the correct environment if given.
