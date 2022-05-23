@@ -100,7 +100,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=reverse-proxy"
-      # http
+      # https
       - "traefik.http.routers.someservice.rule=Host(`someservice.com`)"
       - "traefik.http.routers.someservice.entrypoints=websecure"
       - "traefik.http.routers.someservice.tls=true"
