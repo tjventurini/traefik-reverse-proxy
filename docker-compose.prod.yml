@@ -23,13 +23,15 @@ services:
       # Global redirect to https.
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      # Setup dynamic configuration
+      - "--providers.file.directory=/etc/traefik/traefik.d"
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./traefik.yml:/etc/traefik/middlewares.yml
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./letsencrypt/acme.json:/etc/traefik/acme/acme.json
+      - ./traefik.d:/etc/traefik/traefik.d
     labels:
       - "traefik.enable=true"
       # http
