@@ -4,6 +4,9 @@ init:
 start:
 	@./scripts/start.sh
 
+up:
+	@./scripts/start.sh
+
 down:
 	@./scripts/down.sh
 
