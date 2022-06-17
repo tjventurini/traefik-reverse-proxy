@@ -20,9 +20,13 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.storage=/etc/traefik/acme/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      # Global redirect to https
+      # Global redirect to https.
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      # Global redirect to non-www version of a site.
+      - "--http.middlewares.redirect-to-non-www.redirectRegex.regex=^https://www.(.*)"
+      - "--http.middlewares.redirect-to-non-www.redirectRegex.replacement=https://$${1}"
+      - "--http.middlewares.redirect-to-non-www.redirectRegex.permanent=true"
     ports:
       - "80:80"
       - "443:443"
