@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Load configurations.
-source ./config/colors.conf
+source ./scripts/colors.conf
 
 # Function to show help message.
 function showHelp() {

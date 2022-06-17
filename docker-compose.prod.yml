@@ -23,16 +23,13 @@ services:
       # Global redirect to https.
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
-      # Global redirect to non-www version of a site.
-      - "--http.middlewares.redirect-to-non-www.redirectRegex.regex=^https://www.(.*)"
-      - "--http.middlewares.redirect-to-non-www.redirectRegex.replacement=https://$${1}"
-      - "--http.middlewares.redirect-to-non-www.redirectRegex.permanent=true"
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./letsencrypt/acme.json:/etc/traefik/acme/acme.json
+      - ./traefik.yml:/etc/traefik/traefik.yml
     labels:
       - "traefik.enable=true"
       # http

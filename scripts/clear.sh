@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Load config.
-source ./config/colors.conf
+source ./scripts/colors.conf
 
 # Clean up.
 rm ./.env && echo -e "${SUCCESS}Removed .env ✅${NC}"
