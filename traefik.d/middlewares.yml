@@ -2,6 +2,6 @@ http:
   middlewares:
     redirect-to-non-www:
       redirectRegex:
-        regex: "^https:\\/\\/www\\.(.*)"
-        replacement: "https://$${1}"
+        regex: "^https://www\\.(.*)"
+        replacement: "https://${1}"
         permanent: true
