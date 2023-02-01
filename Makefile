@@ -15,3 +15,8 @@ stop:
 
 clear: down
 	@./scripts/clear.sh
+
+tail:
+	@docker compose logs -f
+
+restart: stop start tail
