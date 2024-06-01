@@ -20,3 +20,9 @@ tail:
 	@docker compose logs -f
 
 restart: stop start tail
+
+ps:
+	@docker compose ps
+
+login:
+	@docker compose exec traefik sh
