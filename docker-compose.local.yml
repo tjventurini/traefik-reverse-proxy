@@ -5,7 +5,7 @@ networks:
 
 services:
   traefik:
-    image: traefik:2.6
+    image: traefik:3
     restart: ${RESTART}
     command:
       - "--providers.docker"
