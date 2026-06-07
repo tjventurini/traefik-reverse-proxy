@@ -1,0 +1,21 @@
+http:
+  routers:
+    hermes-dashboard:
+      entryPoints:
+        - web
+      rule: "Host(`hermes.localhost`)"
+      service: hermes-dashboard
+      middlewares:
+        - hermes-dashboard-loopback-host
+
+  middlewares:
+    hermes-dashboard-loopback-host:
+      headers:
+        customRequestHeaders:
+          Host: "127.0.0.1"
+
+  services:
+    hermes-dashboard:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:9119"
