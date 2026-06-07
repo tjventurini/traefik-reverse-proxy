@@ -51,7 +51,10 @@ NETWORK_NAME=reverse-proxy
 RESTART=no
 DASHBOARD=true
 HOST=localhost
+DOCKER_SOCKET=/var/run/docker.sock
 ```
+
+On `legion`, Docker Desktop exposes its socket at `/home/thomas/.docker/desktop/docker.sock`; set `DOCKER_SOCKET` to that path in `.env` when `/var/run/docker.sock` is not present.
 
 ## Add Docker-Compose Services to Traefik Network
 

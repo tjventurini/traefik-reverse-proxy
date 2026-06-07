@@ -9,13 +9,15 @@ services:
     restart: ${RESTART}
     command:
       - "--providers.docker"
+      - "--providers.docker.exposedByDefault=false"
       - "--api.dashboard=${DASHBOARD}"
       - "--entrypoints.web.address=:80"
+      - "--providers.file.directory=/etc/traefik/traefik.d"
     ports:
       - "80:80"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./traefik.d:/etc/traefik/traefik.d
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - ./traefik.d:/etc/traefik/traefik.d:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.entrypoints=web"

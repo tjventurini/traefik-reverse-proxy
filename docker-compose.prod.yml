@@ -27,9 +27,9 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
       - ./letsencrypt/acme.json:/etc/traefik/acme/acme.json
-      - ./traefik.d:/etc/traefik/traefik.d
+      - ./traefik.d:/etc/traefik/traefik.d:ro
     labels:
       - "traefik.enable=true"
       # http
