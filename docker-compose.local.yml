@@ -12,12 +12,15 @@ services:
       - "--providers.docker.exposedByDefault=false"
       - "--api.dashboard=${DASHBOARD}"
       - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
       - "--providers.file.directory=/etc/traefik/traefik.d"
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
       - ./traefik.d:/etc/traefik/traefik.d:ro
+      - ./certs:/etc/traefik/certs:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.entrypoints=web"

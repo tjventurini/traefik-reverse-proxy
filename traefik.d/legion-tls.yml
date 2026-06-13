@@ -1,0 +1,9 @@
+tls:
+  certificates:
+    - certFile: /etc/traefik/certs/legion-wildcard.crt
+      keyFile: /etc/traefik/certs/legion-wildcard.key
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/legion-wildcard.crt
+        keyFile: /etc/traefik/certs/legion-wildcard.key
