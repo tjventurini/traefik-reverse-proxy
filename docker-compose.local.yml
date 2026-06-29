@@ -14,6 +14,14 @@ services:
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--providers.file.directory=/etc/traefik/traefik.d"
+      # RES-224 (restaurant-cms): HTTP dynamic provider. The restaurant-cms
+      # management plane (homepage) emits one Host(...) router per tenant_domains
+      # row so owner-changed custom domains route immediately, without editing
+      # static labels. Tolerant of the endpoint being down (Traefik keeps the
+      # last-known config and the docker/file routes for other projects).
+      - "--providers.http.endpoint=${RCMS_TRAEFIK_PROVIDER_ENDPOINT:-http://restaurant-cms-homepage:3000/internal/traefik/dynamic}"
+      - "--providers.http.pollInterval=30s"
+      - "--providers.http.headers.Authorization=Bearer ${TRAEFIK_PROVIDER_SECRET:-legion-traefik-provider-secret}"
     ports:
       - "80:80"
       - "443:443"
