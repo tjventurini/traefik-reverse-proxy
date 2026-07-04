@@ -34,9 +34,10 @@
 #
 # Environment overrides:
 #   RCMS_DB_CONTAINER   legion supabase-db container (default: restaurant-cms-supabase-db-1)
-#   TRAEFIK_CONTAINER   traefik container to restart (default: traefik-reverse-proxy-traefik-1)
+#   TRAEFIK_CONTAINER   traefik container name — used as fallback restart target only
+#                       (default: traefik-reverse-proxy-traefik-1)
 #   CERT_DAYS           leaf validity in days (default: 800)
-#   NO_RELOAD=1         generate the cert but do not restart Traefik
+#   NO_RELOAD=1         generate the cert but do not reload Traefik
 #
 set -euo pipefail
 
@@ -247,18 +248,53 @@ echo "==> issued $LEAF_CRT"
 openssl x509 -in "$LEAF_CRT" -noout -issuer -subject -dates
 
 # ---------------------------------------------------------------------------
-# 7. Reload Traefik so it picks up the new cert (file provider does not always
-#    watch cert file contents; a restart is deterministic and blips ~2s).
+# 7. Reload Traefik so it picks up the new cert.
+#    Primary: touch traefik.d/legion-tls.yml — the file provider watches that
+#    directory and performs a live re-read with no container restart (~100ms).
+#    Fallback: docker restart $TRAEFIK_CONTAINER — only used when the SNI
+#    serial verify fails after the touch-reload (CTO-verified 2026-07-04).
 # ---------------------------------------------------------------------------
+TRAEFIK_D="$(cd "$SCRIPT_DIR/../traefik.d" && pwd)"
+
 if [ "${NO_RELOAD:-0}" = "1" ]; then
-  echo "==> NO_RELOAD=1 — skipping Traefik restart (reload manually to apply)"
+  echo "==> NO_RELOAD=1 — skipping Traefik reload (touch $TRAEFIK_D/legion-tls.yml manually to apply)"
 else
   if docker ps --format '{{.Names}}' | grep -qx "$TRAEFIK_CONTAINER"; then
-    echo "==> restarting Traefik ($TRAEFIK_CONTAINER)"
-    docker restart "$TRAEFIK_CONTAINER" >/dev/null
-    echo "==> Traefik restarted"
+    echo "==> touching traefik.d/legion-tls.yml to trigger file-provider reload"
+    touch "$TRAEFIK_D/legion-tls.yml"
+
+    # Give the file provider ~2 s to re-read (poll interval is typically <100 ms).
+    sleep 2
+
+    # SNI verify: probe the first non-wildcard .legion DNS SAN in the new cert.
+    VERIFY_HOST="$(openssl x509 -in "$LEAF_CRT" -noout -ext subjectAltName 2>/dev/null \
+      | grep -oP '(?<=DNS:)[^,\n]+' | grep '\.legion$' | grep -v '^\*' | head -1 || true)"
+    NEW_SERIAL="$(openssl x509 -in "$LEAF_CRT" -noout -serial)"
+
+    RELOAD_OK=0
+    if [ -n "$VERIFY_HOST" ]; then
+      LIVE_SERIAL="$(openssl s_client -connect "127.0.0.1:443" -servername "$VERIFY_HOST" \
+        -CAfile "$CA_CRT" </dev/null 2>/dev/null \
+        | openssl x509 -noout -serial 2>/dev/null || true)"
+      if [ "$LIVE_SERIAL" = "$NEW_SERIAL" ]; then
+        echo "==> SNI verify OK — serial $NEW_SERIAL live for $VERIFY_HOST (no restart needed)"
+        RELOAD_OK=1
+      else
+        echo "WARN: SNI mismatch (live=$LIVE_SERIAL want=$NEW_SERIAL) — falling back to docker restart" >&2
+      fi
+    else
+      # No .legion SAN to probe; trust the touch-reload.
+      echo "==> no .legion SAN to verify — trusting touch-reload"
+      RELOAD_OK=1
+    fi
+
+    if [ "$RELOAD_OK" = "0" ]; then
+      echo "==> restarting Traefik ($TRAEFIK_CONTAINER) as fallback"
+      docker restart "$TRAEFIK_CONTAINER" >/dev/null
+      echo "==> Traefik restarted (fallback)"
+    fi
   else
-    echo "WARN: Traefik container $TRAEFIK_CONTAINER not running — restart it to apply" >&2
+    echo "WARN: Traefik container $TRAEFIK_CONTAINER not running — start it and touch $TRAEFIK_D/legion-tls.yml to apply" >&2
   fi
 fi
 
