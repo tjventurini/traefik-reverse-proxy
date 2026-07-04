@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# gen-legion-cert.sh — (re)generate the legion internal TLS leaf certificate.
+# gen-legion-cert.sh — (re)generate or drift-check the legion internal TLS leaf cert.
 #
 # WHY THIS EXISTS (RES-307)
 # -------------------------
@@ -25,9 +25,12 @@
 # restaurant is added (or wire it into the onboarding/`up-legion` flow).
 #
 # USAGE
-#   scripts/gen-legion-cert.sh [extra-san ...]
-#     extra-san   Optional additional SAN hostnames (e.g. a slug's hosts that
-#                 are not yet in the DB). Bare hostnames only.
+#   scripts/gen-legion-cert.sh [--check] [extra-san ...]
+#     --check     Drift-check mode: exit 0 if the current cert covers all desired
+#                 SANs, non-zero if any SAN is missing. NO side effects — no CSR,
+#                 no cert write, no Traefik restart. Used by reconcile-legion-cert.sh.
+#     extra-san   Optional additional SAN hostnames (e.g. a slug not yet in the DB).
+#                 Bare hostnames only. Ignored in --check mode (DB is the source).
 #
 # Environment overrides:
 #   RCMS_DB_CONTAINER   legion supabase-db container (default: restaurant-cms-supabase-db-1)
@@ -52,17 +55,17 @@ TRAEFIK_CONTAINER="${TRAEFIK_CONTAINER:-traefik-reverse-proxy-traefik-1}"
 CERT_DAYS="${CERT_DAYS:-800}"
 LEGION_IP="${LEGION_IP:-100.76.8.125}"
 
-for f in "$CA_CRT" "$CA_KEY"; do
-  [ -f "$f" ] || { echo "ERROR: missing CA material: $f" >&2; exit 1; }
+# ---------------------------------------------------------------------------
+# Argument parsing — separate --check from extra SANs.
+# ---------------------------------------------------------------------------
+CHECK_MODE=0
+EXTRA_SANS=()
+for arg in "$@"; do
+  case "$arg" in
+    --check) CHECK_MODE=1 ;;
+    *) EXTRA_SANS+=("$arg") ;;
+  esac
 done
-
-# Reuse the existing leaf key if present (keeps the same public key; only the
-# SAN set changes, so already-trusted clients need no re-trust). Generate one on
-# first run.
-if [ ! -f "$LEAF_KEY" ]; then
-  echo "==> generating new leaf private key"
-  openssl genrsa -out "$LEAF_KEY" 2048
-fi
 
 # ---------------------------------------------------------------------------
 # 1. Static infrastructure SANs (non-tenant hosts on the legion box).
@@ -83,11 +86,7 @@ declare -a SANS=(
 )
 
 # ---------------------------------------------------------------------------
-# 2. Per-tenant SANs — enumerated live from the running legion DB so newly
-#    provisioned restaurants are covered automatically.
-#    - `*.<slug>.restaurant-cms.legion` covers admin.<slug>... and api.<slug>...
-#    - custom bare `.legion` domains (e.g. dresdnerhof.legion) get a matching
-#      `*.<custom>` SAN so their admin./api. children are covered too.
+# 2. Shared helpers: add_san + db_query.
 # ---------------------------------------------------------------------------
 add_san() {
   local s="$1"
@@ -104,42 +103,97 @@ db_query() {
     psql -U postgres -d postgres -tAc "$1" 2>/dev/null || true
 }
 
-slugs="$(db_query "SELECT slug FROM public.tenants ORDER BY slug;")"
-if [ -n "$slugs" ]; then
-  while IFS= read -r slug; do
-    [ -z "$slug" ] && continue
-    add_san "${slug}.restaurant-cms.legion"
-    add_san "*.${slug}.restaurant-cms.legion"
-  done <<< "$slugs"
-else
-  echo "WARN: legion DB ($RCMS_DB_CONTAINER) not reachable — seed-tenant fallback" >&2
-  for slug in buchenbeisl dresdnerhof; do
-    add_san "*.${slug}.restaurant-cms.legion"
+# ---------------------------------------------------------------------------
+# 3. Per-tenant SANs — enumerated live from the running legion DB.
+#    Shared between --check and generation modes.
+# ---------------------------------------------------------------------------
+enumerate_tenant_sans() {
+  local slugs
+  slugs="$(db_query "SELECT slug FROM public.tenants ORDER BY slug;")"
+  if [ -n "$slugs" ]; then
+    while IFS= read -r slug; do
+      [ -z "$slug" ] && continue
+      add_san "${slug}.restaurant-cms.legion"
+      add_san "*.${slug}.restaurant-cms.legion"
+    done <<< "$slugs"
+  else
+    echo "WARN: legion DB ($RCMS_DB_CONTAINER) not reachable — seed-tenant fallback" >&2
+    for slug in buchenbeisl dresdnerhof; do
+      add_san "*.${slug}.restaurant-cms.legion"
+    done
+  fi
+
+  # Custom bare `.legion` domains.
+  local custom_hosts
+  custom_hosts="$(db_query "SELECT hostname FROM public.tenant_domains WHERE hostname LIKE '%.legion' AND hostname NOT LIKE '%.restaurant-cms.legion' AND hostname NOT LIKE '%.restaurants.legion' ORDER BY hostname;")"
+  if [ -n "$custom_hosts" ]; then
+    while IFS= read -r host; do
+      [ -z "$host" ] && continue
+      local parent="${host#admin.}"; parent="${parent#api.}"; parent="${parent#www.}"
+      add_san "$parent"
+      add_san "*.${parent}"
+    done <<< "$custom_hosts"
+  fi
+}
+
+enumerate_tenant_sans
+
+# ---------------------------------------------------------------------------
+# 4. Any extra SANs passed on the command line (not used in --check mode).
+# ---------------------------------------------------------------------------
+if [ "$CHECK_MODE" = "0" ]; then
+  for extra in "${EXTRA_SANS[@]}"; do
+    add_san "$extra"
   done
 fi
 
-# Custom bare `.legion` domains (public/admin rows that are NOT managed-namespace).
-custom_hosts="$(db_query "SELECT hostname FROM public.tenant_domains WHERE hostname LIKE '%.legion' AND hostname NOT LIKE '%.restaurant-cms.legion' AND hostname NOT LIKE '%.restaurants.legion' ORDER BY hostname;")"
-if [ -n "$custom_hosts" ]; then
-  while IFS= read -r host; do
-    [ -z "$host" ] && continue
-    # Strip a leading admin./api./www. to get the registrable parent, then add
-    # both the parent and its wildcard (covers admin./api./www. children).
-    parent="${host#admin.}"; parent="${parent#api.}"; parent="${parent#www.}"
-    add_san "$parent"
-    add_san "*.${parent}"
-  done <<< "$custom_hosts"
+# ---------------------------------------------------------------------------
+# --check: drift detection only — no cert/CSR/Traefik side effects.
+# ---------------------------------------------------------------------------
+if [ "$CHECK_MODE" = "1" ]; then
+  if [ ! -f "$LEAF_CRT" ]; then
+    echo "CHECK: no cert at $LEAF_CRT — drift (cert missing)" >&2
+    exit 1
+  fi
+
+  # Parse DNS SANs from the current leaf cert.
+  cert_dns="$(openssl x509 -in "$LEAF_CRT" -noout -ext subjectAltName 2>/dev/null \
+    | tr ',' '\n' | sed -n 's/[[:space:]]*DNS://p' | tr -d ' ')"
+
+  drift=0
+  for san in "${SANS[@]}"; do
+    if ! printf '%s\n' "$cert_dns" | grep -qxF "$san"; then
+      echo "CHECK: missing SAN: $san" >&2
+      drift=1
+    fi
+  done
+
+  if [ "$drift" = "0" ]; then
+    echo "CHECK: cert covers all ${#SANS[@]} desired SANs — in sync" >&2
+    exit 0
+  else
+    exit 1
+  fi
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Any extra SANs passed on the command line (tenant not yet in DB).
+# Generation path (original logic below).
 # ---------------------------------------------------------------------------
-for extra in "$@"; do
-  add_san "$extra"
+
+for f in "$CA_CRT" "$CA_KEY"; do
+  [ -f "$f" ] || { echo "ERROR: missing CA material: $f" >&2; exit 1; }
 done
 
+# Reuse the existing leaf key if present (keeps the same public key; only the
+# SAN set changes, so already-trusted clients need no re-trust). Generate one on
+# first run.
+if [ ! -f "$LEAF_KEY" ]; then
+  echo "==> generating new leaf private key"
+  openssl genrsa -out "$LEAF_KEY" 2048
+fi
+
 # ---------------------------------------------------------------------------
-# 4. Render the OpenSSL config with the assembled SAN list.
+# 5. Render the OpenSSL config with the assembled SAN list.
 # ---------------------------------------------------------------------------
 {
   cat <<'EOF'
@@ -175,7 +229,7 @@ echo "==> SAN set (${#SANS[@]} DNS entries):"
 printf '    %s\n' "${SANS[@]}"
 
 # ---------------------------------------------------------------------------
-# 5. Back up the current cert, issue a new CSR + sign with the internal CA.
+# 6. Back up the current cert, issue a new CSR + sign with the internal CA.
 # ---------------------------------------------------------------------------
 if [ -f "$LEAF_CRT" ]; then
   ts="$(date +%Y%m%d%H%M%S)"
@@ -193,7 +247,7 @@ echo "==> issued $LEAF_CRT"
 openssl x509 -in "$LEAF_CRT" -noout -issuer -subject -dates
 
 # ---------------------------------------------------------------------------
-# 6. Reload Traefik so it picks up the new cert (file provider does not always
+# 7. Reload Traefik so it picks up the new cert (file provider does not always
 #    watch cert file contents; a restart is deterministic and blips ~2s).
 # ---------------------------------------------------------------------------
 if [ "${NO_RELOAD:-0}" = "1" ]; then
