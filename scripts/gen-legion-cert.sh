@@ -76,6 +76,7 @@ declare -a SANS=(
   "legion"
   "hermes.legion"
   "paperclip.legion"
+  "traefik.legion"
   "restaurant-cms.legion"
   "*.restaurant-cms.legion"
   "admin.restaurant-cms.legion"

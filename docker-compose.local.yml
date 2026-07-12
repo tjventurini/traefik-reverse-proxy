@@ -1,6 +1,6 @@
 networks:
   default:
-    internal: false
+    external: true
     name: ${NETWORK_NAME}
 
 services:
@@ -32,5 +32,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.entrypoints=web"
-      - "traefik.http.routers.api.rule=Host(`${HOST}`)"
+      - "traefik.http.routers.api.rule=Host(`${HOST}`) || Host(`traefik.legion`)"
       - "traefik.http.routers.api.service=api@internal"
+      - "traefik.http.routers.api-secure.entrypoints=websecure"
+      - "traefik.http.routers.api-secure.rule=Host(`traefik.legion`)"
+      - "traefik.http.routers.api-secure.service=api@internal"
+      - "traefik.http.routers.api-secure.tls=true"
