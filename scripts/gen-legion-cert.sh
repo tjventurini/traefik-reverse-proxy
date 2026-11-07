@@ -18,11 +18,22 @@
 # TLS check and the admin app shows "Verbindung zum Anmeldedienst fehlgeschlagen"
 # even though routing and DNS/hosts are fine.
 #
-# This script makes cert coverage REUSABLE instead of a hand-edited one-off:
-# it enumerates the live tenants from the running legion DB and regenerates the
-# leaf cert with a `*.<slug>.restaurant-cms.legion` SAN per tenant, plus a
-# `*.<custom>` SAN per custom `.legion` tenant domain. Run it whenever a
-# restaurant is added (or wire it into the onboarding/`up-legion` flow).
+# This cert is a self-signed internal-CA leaf loaded via Traefik's *file*
+# provider, NOT ACME — so Traefik's per-router `tls.domains[].sans` label
+# (the mechanism that works with a real certresolver) has no effect here;
+# nothing issues or extends a cert from that label on its own. To get an
+# equivalent "just add a label" workflow, SAN discovery itself is label-driven
+# (see `enumerate_label_sans` below): any container with `traefik.enable=true`
+# that declares a `Host(`something.legion`)` router rule gets that hostname
+# added as a SAN automatically, no DB row, no hand-edited array. THIS IS THE
+# STANDARD for new hostnames on this host (e.g. docs.votion.legion) — just add
+# the normal Traefik Host() label to your docker-compose.yml; the reconciler
+# timer (~60-90s) notices the drift and reissues the cert, no manual step.
+#
+# The live-DB tenant enumeration below predates that and stays as-is for
+# restaurant-cms's wildcard-per-tenant case (`*.<slug>.restaurant-cms.legion`),
+# which a single Host() label can't express. Run this script by hand whenever
+# you need to force an immediate regen instead of waiting for the timer.
 #
 # USAGE
 #   scripts/gen-legion-cert.sh [--check] [extra-san ...]
@@ -76,7 +87,9 @@ declare -a SANS=(
   "legion"
   "hermes.legion"
   "paperclip.legion"
+  "openclaw.legion"
   "traefik.legion"
+  "votion.legion"
   "restaurant-cms.legion"
   "*.restaurant-cms.legion"
   "admin.restaurant-cms.legion"
@@ -103,6 +116,44 @@ add_san() {
 db_query() {
   docker exec -e PGPASSWORD="${POSTGRES_PASSWORD:-postgres}" "$RCMS_DB_CONTAINER" \
     psql -U postgres -d postgres -tAc "$1" 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# 2b. Label-driven SANs — the standard going forward (RES-??? / VOTA-9).
+#
+# Any running container with `traefik.enable=true` on this host is scanned
+# for `traefik.http.routers.*.rule` labels; every `Host(`...`)` match that
+# ends in `.legion` (or is bare `legion`) is added as a SAN automatically.
+# This is the mechanism new projects should rely on: add a normal Traefik
+# Host() router label to your docker-compose.yml and the reconciler (timer,
+# every ~60-90s) picks up the new hostname and reissues the cert with no
+# manual cert edit, no hand-written SAN, no out-of-band step by anyone.
+#
+# It does NOT replace the static list or the restaurant-cms DB enumeration
+# below — those stay as floors/fallbacks — it just means most new hostnames
+# (e.g. docs.votion.legion) never need either one touched by hand again.
+# ---------------------------------------------------------------------------
+enumerate_label_sans() {
+  local containers
+  containers="$(docker ps --filter "label=traefik.enable=true" --format '{{.Names}}' 2>/dev/null || true)"
+  [ -z "$containers" ] && return 0
+
+  local hosts
+  hosts="$(
+    for c in $containers; do
+      docker inspect -f '{{json .Config.Labels}}' "$c" 2>/dev/null \
+        | jq -r 'to_entries[] | select(.key | test("^traefik\\.http\\.routers\\..*\\.rule$")) | .value' 2>/dev/null
+    done | grep -oP 'Host\(`[^`]+`\)' | grep -oP '(?<=`)[^`]+(?=`)' | sort -u
+  )"
+  [ -z "$hosts" ] && return 0
+
+  while IFS= read -r host; do
+    [ -z "$host" ] && continue
+    case "$host" in
+      *.legion|legion) add_san "$host" ;;
+      *) : ;; # not a .legion host (e.g. *.localhost) — not our cert's job
+    esac
+  done <<< "$hosts"
 }
 
 # ---------------------------------------------------------------------------
@@ -138,6 +189,7 @@ enumerate_tenant_sans() {
   fi
 }
 
+enumerate_label_sans
 enumerate_tenant_sans
 
 # ---------------------------------------------------------------------------
